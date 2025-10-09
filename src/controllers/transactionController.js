@@ -69,3 +69,78 @@ export const handleAddTransaction = async (req, res, next) => {
     next(error);
   }
 };
+
+export const handleGetTransactions = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+  const { id } = req.params;
+
+  // 🔹 Get pagination parameters from query string
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 30;
+  const offset = (page - 1) * limit;
+
+  try {
+    if (!user) throw createError(401, "Unauthorized");
+
+    // 🔹 Find client by id
+    const [clientRows] = await pool.query(
+      `SELECT * FROM clients WHERE id = ?`,
+      [id]
+    );
+    if (!clientRows || clientRows?.length === 0) {
+      throw createError(404, "Client not found");
+    }
+    const client = clientRows[0];
+
+    // 🔹 Get total count of transactions
+    const [countResult] = await pool.query(
+      `SELECT COUNT(*) as total FROM transactions WHERE client_id = ?`,
+      [client.id]
+    );
+    const totalTransactions = countResult[0].total;
+
+    // 🔹 Fetch paginated transactions for the client
+    const [transactions] = await pool.query(
+      `SELECT * FROM transactions 
+       WHERE client_id = ? 
+       ORDER BY created_date DESC, id DESC
+       LIMIT ? OFFSET ?`,
+      [client.id, limit, offset]
+    );
+
+    if (!transactions || transactions?.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No transactions found for this client",
+        data: [],
+        pagination: {
+          currentPage: page,
+          totalPages: 0,
+          totalTransactions: 0,
+          limit,
+          hasNextPage: false,
+          hasPrevPage: false,
+        },
+      });
+    }
+
+    // 🔹 Calculate pagination info
+    const totalPages = Math.ceil(totalTransactions / limit);
+
+    res.status(200).json({
+      success: true,
+      message: "Get transactions successfully",
+      data: transactions,
+      pagination: {
+        currentPage: page,
+        totalPages,
+        totalTransactions,
+        limit,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};

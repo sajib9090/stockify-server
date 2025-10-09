@@ -69,23 +69,37 @@ export const handleGetClients = async (req, res, next) => {
 
   try {
     // 🔹 Check authorization
-    if (!user) {
-      throw createError(401, "Unauthorized");
-    }
+    if (!user) throw createError(401, "Unauthorized");
+
+    // 🔹 Get and sanitize search query
+    let searchQuery = req.query.search || "";
+    searchQuery = searchQuery
+      .toString()
+      .trim()
+      .replace(/[^\w\s+-.@]/g, "");
 
     // 🔹 Get brand_id from users table
     const [userRows] = await pool.query(
       "SELECT id, brand_id FROM users WHERE id = ?",
-      [user?.id]
+      [user.id]
     );
 
-    if (!userRows || userRows?.length === 0) {
+    if (!userRows || userRows.length === 0)
       throw createError(404, "User not found or invalid user ID");
-    }
 
     const { brand_id } = userRows[0];
 
-    // 🔹 Fetch all clients under that brand
+    // 🔹 Build WHERE clause dynamically
+    let whereClause = "WHERE c.brand_id = ?";
+    const queryParams = [brand_id];
+
+    if (searchQuery !== "") {
+      whereClause += " AND (c.name LIKE ? OR c.mobile LIKE ?)";
+      const searchPattern = `%${searchQuery}%`;
+      queryParams.push(searchPattern, searchPattern);
+    }
+
+    // 🔹 Fetch clients with transaction summary
     const [clients] = await pool.query(
       `SELECT 
         c.*,
@@ -93,47 +107,60 @@ export const handleGetClients = async (req, res, next) => {
         COALESCE(SUM(CASE WHEN t.type = 'credit' THEN t.amount ELSE 0 END), 0) AS creditSum
       FROM clients c
       LEFT JOIN transactions t ON c.id = t.client_id
-      WHERE c.brand_id = ?
+      ${whereClause}
       GROUP BY c.id
       ORDER BY c.id DESC`,
-      [brand_id]
+      queryParams
     );
 
-    // 🔹 If no clients found
-    if (!clients || clients?.length === 0) {
+    if (!clients || clients.length === 0) {
       return res.status(200).json({
         success: true,
-        message: "No clients found",
+        message: searchQuery
+          ? "No clients found matching your search"
+          : "No clients found",
         data: [],
+        customerCount: 0,
+        supplierCount: 0,
+        total: 0,
       });
     }
 
-    // 🔹 Count customers and suppliers
+    // 🔹 Count customers and suppliers (with same filter)
+    let countWhereClause = "WHERE brand_id = ?";
+    const countParams = [brand_id];
+
+    if (searchQuery !== "") {
+      countWhereClause += " AND (name LIKE ? OR mobile LIKE ?)";
+      const searchPattern = `%${searchQuery}%`;
+      countParams.push(searchPattern, searchPattern);
+    }
+
     const [typeCount] = await pool.query(
       `SELECT 
-          SUM(CASE WHEN type = 'customer' THEN 1 ELSE 0 END) AS total_customers,
-          SUM(CASE WHEN type = 'supplier' THEN 1 ELSE 0 END) AS total_suppliers
+        SUM(CASE WHEN type = 'customer' THEN 1 ELSE 0 END) AS total_customers,
+        SUM(CASE WHEN type = 'supplier' THEN 1 ELSE 0 END) AS total_suppliers
        FROM clients 
-       WHERE brand_id = ?`,
-      [brand_id]
+       ${countWhereClause}`,
+      countParams
     );
 
-    // 🔹 Prepare counts (default 0 if null)
     const customerCount = typeCount[0]?.total_customers || 0;
     const supplierCount = typeCount[0]?.total_suppliers || 0;
 
-    const clientsWithBalance = clients?.map((client) => ({
+    // 🔹 Add balance field
+    const clientsWithBalance = clients.map((client) => ({
       ...client,
-      balance: client?.creditSum - client?.debitSum,
+      balance: client.creditSum - client.debitSum,
     }));
 
     // ✅ Final response
     res.status(200).json({
       success: true,
-      total: clients?.length || 0,
+      total: clients.length,
       customerCount,
       supplierCount,
-      data: clientsWithBalance || [],
+      data: clientsWithBalance,
     });
   } catch (error) {
     next(error);

@@ -15,7 +15,10 @@ import {
   handleGetClientById,
   handleGetClients,
 } from "../controllers/clientController.js";
-import { handleAddTransaction } from "../controllers/transactionController.js";
+import {
+  handleAddTransaction,
+  handleGetTransactions,
+} from "../controllers/transactionController.js";
 
 export const apiRouter = express.Router();
 
@@ -38,4 +41,9 @@ apiRouter.post(
   "/transactions/add-transaction/:id",
   isLoggedIn,
   handleAddTransaction
+);
+apiRouter.get(
+  "/transactions/get-transactions/:id",
+  isLoggedIn,
+  handleGetTransactions
 );
