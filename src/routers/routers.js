@@ -6,8 +6,16 @@ import {
   handleRefreshToken,
 } from "../controllers/userController.js";
 import { isLoggedIn } from "../middleware/authMiddleware.js";
-import { handleCreateCustomerSupplier } from "../controllers/customerSupplierController.js";
-import { handleGetBrand } from "../controllers/brandController.js";
+import {
+  handleAddBrand,
+  handleGetBrand,
+} from "../controllers/brandController.js";
+import {
+  handleCreateClient,
+  handleGetClientById,
+  handleGetClients,
+} from "../controllers/clientController.js";
+import { handleAddTransaction } from "../controllers/transactionController.js";
 
 export const apiRouter = express.Router();
 
@@ -17,7 +25,17 @@ apiRouter.get("/users/auth/manage-token", handleRefreshToken);
 apiRouter.post("/users/auth/logout", isLoggedIn, handleLogout);
 
 //brand
+apiRouter.post("/brands/create-brand", isLoggedIn, handleAddBrand);
 apiRouter.get("/brands/get-brand-info", isLoggedIn, handleGetBrand);
 
 //tally
-apiRouter.post("/cs/create", isLoggedIn, handleCreateCustomerSupplier);
+apiRouter.post("/clients/create-client", isLoggedIn, handleCreateClient);
+apiRouter.get("/clients/get-clients", isLoggedIn, handleGetClients);
+apiRouter.get("/clients/get-client/:id", isLoggedIn, handleGetClientById);
+
+//transactions
+apiRouter.post(
+  "/transactions/add-transaction/:id",
+  isLoggedIn,
+  handleAddTransaction
+);

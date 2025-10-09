@@ -195,7 +195,6 @@ export const handleLoginUser = async (req, res, next) => {
     res.status(200).send({
       success: true,
       message: "User login successfully",
-      accessToken: accessToken,
       user: {
         id: user?.id,
         email: user?.email,
