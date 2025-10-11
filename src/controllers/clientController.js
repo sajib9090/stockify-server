@@ -223,3 +223,54 @@ export const handleGetClientById = async (req, res, next) => {
     next(error);
   }
 };
+
+export const handleRemoveClientById = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+  const { id } = req.params;
+  try {
+    if (!user) throw createError(401, "Unauthorized");
+
+    if (!id) {
+      throw createError(400, "Client ID is required");
+    }
+
+    // Validate and sanitize clientId
+    const sanitizedId = Number(id);
+
+    if (!sanitizedId || isNaN(sanitizedId) || sanitizedId <= 0) {
+      throw createError(400, "Invalid client ID");
+    }
+
+    // Check if client exists and belongs to the user's brand
+    const [clientRows] = await pool.query(
+      "SELECT id, brand_id FROM clients WHERE id = ?",
+      [sanitizedId]
+    );
+
+    if (!clientRows || clientRows?.length === 0) {
+      throw createError(404, "Client not found");
+    }
+
+    // Delete all transactions for the client
+    await pool.query("DELETE FROM transactions WHERE client_id = ?", [
+      sanitizedId,
+    ]);
+
+    // Delete the client
+    const [deleteResult] = await pool.query(
+      "DELETE FROM clients WHERE id = ?",
+      [sanitizedId]
+    );
+
+    if (!deleteResult || deleteResult?.affectedRows === 0) {
+      throw createError(500, "Failed to remove client");
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Client removed successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};

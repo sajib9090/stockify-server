@@ -23,14 +23,9 @@ export const handleAddTransaction = async (req, res, next) => {
     if (!["credit", "debit"].includes(type))
       throw createError(400, "Type must be 'credit' or 'debit'");
 
-    // 🔹 Sanitize description (remove HTML, trim spaces)
-    let sanitizedDescription = null;
-    if (description && typeof description === "string") {
-      sanitizedDescription = description.replace(/<[^>]*>?/gm, ""); // remove HTML tags
+    // 🔹 Keep description as is, just handle null/undefined
+    const finalDescription = description || null;
 
-      // If it becomes empty after cleaning, set null
-      if (!sanitizedDescription) sanitizedDescription = null;
-    }
     // find client by id
     const [clientRows] = await pool.query(
       `SELECT * FROM clients WHERE id = ?`,
@@ -49,7 +44,7 @@ export const handleAddTransaction = async (req, res, next) => {
       (client_id, amount, type, description, created_date)
       VALUES (?, ?, ?, ?, ?)
       `,
-      [client?.id, numericAmount, type, sanitizedDescription, created_date]
+      [client?.id, numericAmount, type, finalDescription, created_date]
     );
 
     if (!result || result?.affectedRows === 0) {
@@ -139,6 +134,69 @@ export const handleGetTransactions = async (req, res, next) => {
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleGetTransactionById = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+  const { transactionId } = req.params;
+
+  try {
+    if (!user) throw createError(401, "Unauthorized");
+
+    // 🔹 Fetch transaction by id
+    const [transactions] = await pool.query(
+      `SELECT * FROM transactions WHERE id = ?`,
+      [transactionId]
+    );
+
+    if (!transactions || transactions?.length === 0) {
+      throw createError(404, "Transaction not found");
+    }
+
+    const transaction = transactions[0];
+
+    res.status(200).json({
+      success: true,
+      message: "Get transaction successfully",
+      data: transaction,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleDeleteTransaction = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+  const { id } = req.params;
+  try {
+    if (!user) throw createError(401, "Unauthorized");
+
+    //check transaction exist or not and then remove it from db
+    const [rows] = await pool.query(
+      "SELECT id FROM transactions WHERE id = ?",
+      [id]
+    );
+
+    if (rows?.length === 0) {
+      throw createError(404, "Transaction not found");
+    }
+
+    // Remove from db
+    const [result] = await pool.query("DELETE FROM transactions WHERE id = ?", [
+      id,
+    ]);
+
+    if (!result || result?.affectedRows === 0) {
+      throw createError(500, "Failed to delete transaction");
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Transaction remove successfully",
     });
   } catch (error) {
     next(error);

@@ -14,9 +14,12 @@ import {
   handleCreateClient,
   handleGetClientById,
   handleGetClients,
+  handleRemoveClientById,
 } from "../controllers/clientController.js";
 import {
   handleAddTransaction,
+  handleDeleteTransaction,
+  handleGetTransactionById,
   handleGetTransactions,
 } from "../controllers/transactionController.js";
 
@@ -35,6 +38,11 @@ apiRouter.get("/brands/get-brand-info", isLoggedIn, handleGetBrand);
 apiRouter.post("/clients/create-client", isLoggedIn, handleCreateClient);
 apiRouter.get("/clients/get-clients", isLoggedIn, handleGetClients);
 apiRouter.get("/clients/get-client/:id", isLoggedIn, handleGetClientById);
+apiRouter.delete(
+  "/clients/delete-client/:id",
+  isLoggedIn,
+  handleRemoveClientById
+);
 
 //transactions
 apiRouter.post(
@@ -46,4 +54,14 @@ apiRouter.get(
   "/transactions/get-transactions/:id",
   isLoggedIn,
   handleGetTransactions
+);
+apiRouter.get(
+  "/transactions/get-transaction/:transactionId",
+  isLoggedIn,
+  handleGetTransactionById
+);
+apiRouter.delete(
+  "/transactions/delete-transaction/:id",
+  isLoggedIn,
+  handleDeleteTransaction
 );
