@@ -12,6 +12,7 @@ import {
 } from "../controllers/brandController.js";
 import {
   handleCreateClient,
+  handleEditClientById,
   handleGetClientById,
   handleGetClients,
   handleRemoveClientById,
@@ -22,6 +23,7 @@ import {
   handleGetTransactionById,
   handleGetTransactions,
 } from "../controllers/transactionController.js";
+import { upload } from "../middleware/multer.js";
 
 export const apiRouter = express.Router();
 
@@ -40,8 +42,15 @@ apiRouter.get("/clients/get-clients", isLoggedIn, handleGetClients);
 apiRouter.get("/clients/get-client/:id", isLoggedIn, handleGetClientById);
 apiRouter.delete(
   "/clients/delete-client/:id",
+  upload.single("avatar"),
   isLoggedIn,
   handleRemoveClientById
+);
+apiRouter.put(
+  "/clients/edit-client/:id",
+  upload.single("avatar"),
+  isLoggedIn,
+  handleEditClientById
 );
 
 //transactions

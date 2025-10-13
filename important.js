@@ -21,4 +21,8 @@ export const refreshTokenCookieMaxAge = parseInt(
   process.env.REFRESH_TOKEN_COOKIE_MAXAGE
 );
 
+export const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
+export const cloudinaryAPIKey = process.env.CLOUDINARY_API_KEY;
+export const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET;
+
 export const nodeEnv = process.env.NODE_ENV;
