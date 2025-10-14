@@ -283,7 +283,7 @@ export const handleEditClientById = async (req, res, next) => {
   const user = req.user.user ? req.user.user : req.user;
   const { id } = req.params;
   const { name, mobile } = req.body;
-  const bufferFile = req.file?.buffer; 
+  const bufferFile = req.file?.buffer;
 
   try {
     // Authorization check
@@ -336,7 +336,7 @@ export const handleEditClientById = async (req, res, next) => {
         throw createError(400, "Invalid mobile number");
       }
 
-      if (mobile !== currentClient.mobile) {
+      if (mobile !== currentClient?.mobile) {
         updates.push("mobile = ?");
         values.push(mobile);
       }
