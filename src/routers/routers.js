@@ -1,6 +1,7 @@
 import express from "express";
 import {
   handleCreateUser,
+  handleEditUser,
   handleLoginUser,
   handleLogout,
   handleRefreshToken,
@@ -31,7 +32,13 @@ export const apiRouter = express.Router();
 apiRouter.post("/users/auth/register-user", handleCreateUser);
 apiRouter.post("/users/auth/login", handleLoginUser);
 apiRouter.get("/users/auth/manage-token", handleRefreshToken);
-apiRouter.post("/users/auth/logout", isLoggedIn, handleLogout);
+apiRouter.post("/users/auth/logout", handleLogout);
+apiRouter.put(
+  "/users/user/edit-user",
+  upload.single("avatar"),
+  isLoggedIn,
+  handleEditUser
+);
 
 //brand
 apiRouter.post("/brands/create-brand", isLoggedIn, handleAddBrand);

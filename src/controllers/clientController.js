@@ -37,7 +37,8 @@ export const handleCreateClient = async (req, res, next) => {
       }
     }
 
-    // check user exists in db
+    // check user exists in db also validate brand_id exists
+
     const [userRows] = await pool.query(
       "SELECT id, brand_id FROM users WHERE id = ?",
       [user?.id]
@@ -48,6 +49,9 @@ export const handleCreateClient = async (req, res, next) => {
     }
 
     const { id: created_by, brand_id } = userRows[0];
+    if (!brand_id) {
+      throw createError(400, "User does not have a brand associated");
+    }
 
     // Insert client into DB
     const [result] = await pool.query(
@@ -380,16 +384,9 @@ export const handleEditClientById = async (req, res, next) => {
       throw createError(500, "Failed to update client in the database");
     }
 
-    // Fetch updated client data
-    const [updatedClientRows] = await pool.query(
-      `SELECT * FROM clients WHERE id = ?`,
-      [sanitizedId]
-    );
-
     res.status(200).json({
       success: true,
       message: "Client updated successfully",
-      data: updatedClientRows[0],
     });
   } catch (error) {
     next(error);

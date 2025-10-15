@@ -13,11 +13,14 @@ import {
   nodeEnv,
   refreshTokenCookieMaxAge,
 } from "../../important.js";
+import {
+  deleteFromCloudinary,
+  uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 
 export const handleCreateUser = async (req, res, next) => {
+  const { name, email, mobile, password } = req.body;
   try {
-    const { name, email, mobile, password } = req.body;
-
     if (!name) {
       throw createError(400, "Name is required");
     }
@@ -87,6 +90,23 @@ export const handleCreateUser = async (req, res, next) => {
       throw createError(500, "Failed to create user");
     }
 
+    // generate a six digit verification code
+    const verificationCode = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
+    console.log("Verification Code:", verificationCode);
+
+    const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
+
+    // store verification code in otp table
+    const [otpResult] = await pool.query(
+      "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
+      [result?.insertId, hashedVerificationCode]
+    );
+    if (!otpResult?.insertId) {
+      throw createError(500, "Failed to store verification code");
+    }
+
     res.status(200).send({
       success: true,
       message: "User register in successfully",
@@ -136,8 +156,33 @@ export const handleLoginUser = async (req, res, next) => {
     }
 
     // Check if user is not active
-    if (user?.active_status === 0) {
-      throw createError(403, "Your account is not active yet");
+    if (user.active_status === 0) {
+      // Generate 6-digit OTP
+      const verificationCode = Math.floor(
+        100000 + Math.random() * 900000
+      ).toString();
+      console.log("Verification Code:", verificationCode);
+
+      // Hash the OTP before storing
+      const salt = await bcrypt.genSalt(10);
+      const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
+
+      // Store OTP in the database
+      const [otpResult] = await pool.query(
+        "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
+        [user.id, hashedVerificationCode]
+      );
+
+      if (!otpResult.insertId) {
+        throw createError(500, "Failed to store verification code");
+      }
+
+      // Send response with info (don’t send the real OTP in production)
+      return res.status(403).json({
+        success: true,
+        message:
+          "Your account is not active yet. A verification code has been sent.",
+      });
     }
     // Check if user is banned
     if (user?.banned_user) {
@@ -200,7 +245,20 @@ export const handleLoginUser = async (req, res, next) => {
         email: user?.email,
         name: user?.name,
         role: user?.role,
+        avatar_url: user?.avatar_url,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleVerifyOtp = async (req, res, next) => {
+  
+  try {
+    res.status(200).json({
+      success: true,
+      message: "OTP verified successfully",
     });
   } catch (error) {
     next(error);
@@ -278,6 +336,100 @@ export const handleLogout = async (req, res, next) => {
     res.status(200).send({
       success: true,
       message: "Logged out successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleEditUser = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+  const { name } = req.body;
+  const bufferFile = req.file?.buffer;
+  try {
+    if (!user) {
+      throw createError(401, "Unauthorized");
+    }
+    // get user info from db
+    const [rows] = await pool.query(
+      "SELECT name, avatar_id, avatar_url FROM users WHERE id = ?",
+      [user?.id]
+    );
+
+    const existingUser = rows[0] || null;
+    if (!existingUser) {
+      throw createError(404, "User not found");
+    }
+
+    const updates = [];
+    const values = [];
+
+    // ✅ Validate & update name if changed
+    if (name !== undefined) {
+      const processedName = validateString(name, "Name", 2, 30);
+      if (processedName !== existingUser?.name) {
+        updates.push("name = ?");
+        values.push(processedName);
+      }
+    }
+
+    // ✅ Handle avatar upload if file provided
+    if (bufferFile) {
+      // delete old one if exists
+      if (existingUser?.avatar_id) {
+        await deleteFromCloudinary(existingUser?.avatar_id);
+      }
+
+      const avatar = await uploadOnCloudinary(bufferFile);
+      if (!avatar?.public_id || !avatar?.secure_url) {
+        throw createError(500, "Something went wrong while uploading image");
+      }
+
+      // add avatar fields to update
+      updates.push("avatar_id = ?", "avatar_url = ?");
+      values.push(avatar.public_id, avatar.secure_url);
+    }
+
+    // If no changes detected, return early
+    if (updates.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: "No changes detected. Data is already up to date",
+        data: existingUser,
+      });
+    }
+
+    // ✅ Always update updated_at
+    updates.push("updated_at = NOW()");
+    values.push(user?.id);
+
+    // Build & execute update query
+    const updateQuery = `UPDATE users SET ${updates.join(", ")} WHERE id = ?`;
+    const [result] = await pool.query(updateQuery, values);
+
+    if (!result || result?.affectedRows === 0) {
+      throw createError(500, "Failed to update user in the database");
+    }
+
+    //get updated user info from db
+    const [newRows] = await pool.query(
+      "SELECT id, email, name, avatar_url, role FROM users WHERE id = ?",
+      [user?.id]
+    );
+    const userInfo = newRows[0] || null;
+    if (!userInfo) {
+      throw createError(404, "User not found after update");
+    }
+    res.status(200).json({
+      success: true,
+      message: "User edit successfully",
+      user: {
+        id: userInfo?.id,
+        email: userInfo?.email,
+        name: userInfo?.name,
+        role: userInfo?.role,
+        avatar_url: userInfo?.avatar_url,
+      },
     });
   } catch (error) {
     next(error);

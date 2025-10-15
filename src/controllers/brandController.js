@@ -63,6 +63,11 @@ export const handleAddBrand = async (req, res, next) => {
     res.status(200).send({
       success: true,
       message: "Brand created successfully",
+      data: {
+        brand_id: result?.insertId,
+        name: processedBrandName,
+        mobile_1: mobile_1,
+      },
     });
   } catch (error) {
     next(error);
