@@ -25,4 +25,10 @@ export const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME;
 export const cloudinaryAPIKey = process.env.CLOUDINARY_API_KEY;
 export const cloudinaryApiSecret = process.env.CLOUDINARY_API_SECRET;
 
+export const otpExpiringAge = parseInt(process.env.OTP_AGE);
+
+export const smtpUsername = process.env.SMTP_USERNAME;
+export const smtpPassword = process.env.SMTP_PASSWORD;
+export const smtpClientUrl = process.env.CLIENT_URL;
+
 export const nodeEnv = process.env.NODE_ENV;

@@ -11,16 +11,19 @@ import {
   jwtRefreshExpiresIn,
   jwtRefreshSecret,
   nodeEnv,
+  otpExpiringAge,
   refreshTokenCookieMaxAge,
 } from "../../important.js";
 import {
   deleteFromCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
+import { emailWithNodeMailer } from "../utils/email.js";
+import { emailTemplate } from "../template/emailTemplate.js";
 
 export const handleCreateUser = async (req, res, next) => {
-  const { name, email, mobile, password } = req.body;
   try {
+    const { name, email, mobile, password } = req.body;
     if (!name) {
       throw createError(400, "Name is required");
     }
@@ -94,9 +97,21 @@ export const handleCreateUser = async (req, res, next) => {
     const verificationCode = Math.floor(
       100000 + Math.random() * 900000
     ).toString();
-    console.log("Verification Code:", verificationCode);
+    // console.log("Verification Code:", verificationCode);
 
     const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
+
+    const emailData = {
+      email,
+      subject: "Verification Code",
+      html: emailTemplate(verificationCode),
+    };
+
+    try {
+      await emailWithNodeMailer(emailData);
+    } catch (emailError) {
+      next(createError(500, "Failed to send verification email"));
+    }
 
     // store verification code in otp table
     const [otpResult] = await pool.query(
@@ -155,17 +170,39 @@ export const handleLoginUser = async (req, res, next) => {
       throw createError(401, "Invalid credentials");
     }
 
+    // Verify password
+    const isPasswordValid = await bcrypt.compare(
+      trimmedPassword,
+      user?.password
+    );
+
+    if (!isPasswordValid) {
+      throw createError(401, "Invalid credentials");
+    }
     // Check if user is not active
     if (user.active_status === 0) {
       // Generate 6-digit OTP
       const verificationCode = Math.floor(
         100000 + Math.random() * 900000
       ).toString();
-      console.log("Verification Code:", verificationCode);
+      // console.log("Verification Code:", verificationCode);
 
       // Hash the OTP before storing
       const salt = await bcrypt.genSalt(10);
       const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
+      const email = user?.email;
+      const emailData = {
+        email,
+        subject: "Verification Code",
+        html: emailTemplate(verificationCode),
+      };
+
+      try {
+        await emailWithNodeMailer(emailData);
+      } catch (emailError) {
+        // console.log(emailError);
+        next(createError(500, "Failed to send verification email"));
+      }
 
       // Store OTP in the database
       const [otpResult] = await pool.query(
@@ -180,23 +217,12 @@ export const handleLoginUser = async (req, res, next) => {
       // Send response with info (don’t send the real OTP in production)
       return res.status(403).json({
         success: true,
-        message:
-          "Your account is not active yet. A verification code has been sent.",
+        message: "Your account is not active yet.",
       });
     }
     // Check if user is banned
     if (user?.banned_user) {
       throw createError(403, "Your account has been banned");
-    }
-
-    // Verify password
-    const isPasswordValid = await bcrypt.compare(
-      trimmedPassword,
-      user?.password
-    );
-
-    if (!isPasswordValid) {
-      throw createError(401, "Invalid credentials");
     }
 
     // Generate JWT tokens
@@ -253,12 +279,236 @@ export const handleLoginUser = async (req, res, next) => {
   }
 };
 
-export const handleVerifyOtp = async (req, res, next) => {
-  
+export const handleForgotPassword = async (req, res, next) => {
+  const { email } = req.params;
+
   try {
+    if (!email) {
+      throw createError(400, "Email is required");
+    }
+
+    if (!validator.isEmail(email)) {
+      throw createError(400, "Invalid email address");
+    }
+
+    // check db user exists
+    const [userRows] = await pool.query(
+      "SELECT id FROM users WHERE email = ? LIMIT 1",
+      [email]
+    );
+    const user = userRows[0] || null;
+    if (!user) {
+      throw createError(404, "User not found");
+    }
+
+    // Generate 6-digit OTP
+    const verificationCode = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
+
+    // console.log(verificationCode);
+
+    // Hash the OTP before storing
+    const salt = await bcrypt.genSalt(10);
+    const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
+
+    const emailData = {
+      email,
+      subject: "Forgot Password Verification Code",
+      html: emailTemplate(verificationCode),
+    };
+
+    try {
+      await emailWithNodeMailer(emailData);
+    } catch (emailError) {
+      // console.log(emailError);
+      next(createError(500, "Failed to send verification email"));
+    }
+
+    // Store OTP in the database
+    const [otpResult] = await pool.query(
+      "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
+      [user.id, hashedVerificationCode]
+    );
+
+    if (!otpResult.insertId) {
+      throw createError(500, "Failed to store verification code");
+    }
+
+    res
+      .status(200)
+      .json({ success: true, message: "Forgot password successfully" });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleVerifyOtp = async (req, res, next) => {
+  const { email, otp } = req.body;
+  try {
+    if (!email || !otp) {
+      throw createError(400, "Email and OTP are required");
+    }
+    if (otp.length !== 6 || !/^\d{6}$/.test(otp)) {
+      throw createError(400, "OTP must be a 6-digit number");
+    }
+    // find the user and check if exists and user active_status is 0
+    const [userRows] = await pool.query(
+      "SELECT id, active_status FROM users WHERE email = ? LIMIT 1",
+      [email]
+    );
+    const user = userRows[0] || null;
+    if (!user) {
+      throw createError(404, "User not found");
+    }
+
+    // get the latest otp for the user from otp table
+    const [otpRows] = await pool.query(
+      "SELECT otp, created_at FROM otp WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+      [user?.id]
+    );
+    const otpRecord = otpRows[0] || null;
+    if (!otpRecord) {
+      throw createError(404, "OTP not found. Please request a new one.");
+    }
+    // Check if OTP is expired (valid for 10 minutes)
+    const otpAge = Date.now() - new Date(otpRecord?.created_at).getTime();
+
+    if (otpAge > otpExpiringAge) {
+      throw createError(400, "OTP has expired. Please request a new one.");
+    }
+    // Compare provided OTP with the hashed OTP in the database
+    const isOtpValid = await bcrypt.compare(otp, otpRecord?.otp);
+    if (!isOtpValid) {
+      throw createError(400, "Invalid OTP");
+    }
+    // Update user's active_status to 1
+    const [updateResult] = await pool.query(
+      "UPDATE users SET active_status = 1 WHERE id = ?",
+      [user?.id]
+    );
+    if (updateResult?.affectedRows === 0) {
+      throw createError(500, "Failed to update user status");
+    }
+
+    //remove all otp matching userid
+    await pool.query("DELETE FROM otp WHERE user_id = ?", [user?.id]);
     res.status(200).json({
       success: true,
       message: "OTP verified successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleRegenerateOtp = async (req, res, next) => {
+  const { email } = req.params;
+  try {
+    if (!email) {
+      throw createError(400, "User ID is required");
+    }
+    // find the user and check if exists and user active_status is 0
+    const [userRows] = await pool.query(
+      "SELECT id, active_status FROM users WHERE email = ? LIMIT 1",
+      [email]
+    );
+    const user = userRows[0] || null;
+    if (!user) {
+      throw createError(404, "User not found");
+    }
+
+    // Generate 6-digit OTP
+    const verificationCode = Math.floor(
+      100000 + Math.random() * 900000
+    ).toString();
+    // console.log("Verification Code:", verificationCode);
+    // Hash the OTP before storing
+    const salt = await bcrypt.genSalt(10);
+    const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
+
+    const emailData = {
+      email,
+      subject: "verification Code",
+      html: emailTemplate(verificationCode),
+    };
+
+    try {
+      await emailWithNodeMailer(emailData);
+    } catch (emailError) {
+      next(createError(500, "Failed to send verification email"));
+    }
+    // Store OTP in the database
+    const [otpResult] = await pool.query(
+      "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
+      [user?.id, hashedVerificationCode]
+    );
+    if (!otpResult.insertId) {
+      throw createError(500, "Failed to store verification code");
+    }
+    res.status(200).json({
+      success: true,
+      message: "Regenerate OTP is successfully",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleSetNewPassword = async (req, res, next) => {
+  const { email, new_password } = req.body;
+  try {
+    if (!email || !new_password) {
+      throw createError(400, "Email and new password are required");
+    }
+    if (!validator.isEmail(email)) {
+      throw createError(400, "Invalid email address");
+    }
+    const trimmedPassword = new_password.replace(/\s/g, "");
+
+    if (trimmedPassword?.length < 8 || trimmedPassword?.length > 30) {
+      throw createError(
+        400,
+        "Password must be at least 8 characters long and not more than 30 characters long"
+      );
+    }
+    // check db user exists
+    const [userRows] = await pool.query(
+      "SELECT id, password FROM users WHERE email = ? LIMIT 1",
+      [email]
+    );
+    const user = userRows[0] || null;
+
+    if (!user) {
+      throw createError(404, "User not found");
+    }
+
+    // also validate that new password is not same as old password
+    const isSamePassword = await bcrypt.compare(
+      trimmedPassword,
+      user?.password
+    );
+    if (isSamePassword) {
+      throw createError(
+        400,
+        "New password must be different from the old password"
+      );
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(trimmedPassword, salt);
+    // update user password in db
+    const [updateResult] = await pool.query(
+      "UPDATE users SET password = ? WHERE id = ?",
+      [hashedPassword, user?.id]
+    );
+    if (updateResult?.affectedRows === 0) {
+      throw createError(500, "Failed to update password");
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Set new password successfully",
     });
   } catch (error) {
     next(error);

@@ -2,9 +2,13 @@ import express from "express";
 import {
   handleCreateUser,
   handleEditUser,
+  handleForgotPassword,
   handleLoginUser,
   handleLogout,
   handleRefreshToken,
+  handleRegenerateOtp,
+  handleSetNewPassword,
+  handleVerifyOtp,
 } from "../controllers/userController.js";
 import { isLoggedIn } from "../middleware/authMiddleware.js";
 import {
@@ -39,6 +43,10 @@ apiRouter.put(
   isLoggedIn,
   handleEditUser
 );
+apiRouter.post("/users/user/verify-otp/:email", handleVerifyOtp);
+apiRouter.post("/users/user/regenerate-otp/:email", handleRegenerateOtp);
+apiRouter.post("/users/user/forgot-password/:email", handleForgotPassword);
+apiRouter.post("/users/user/set-password/", handleSetNewPassword);
 
 //brand
 apiRouter.post("/brands/create-brand", isLoggedIn, handleAddBrand);
