@@ -247,14 +247,14 @@ export const handleLoginUser = async (req, res, next) => {
     res.cookie("accessToken", accessToken, {
       httpOnly: true,
       secure: nodeEnv === "production",
-      sameSite: "strict",
+      sameSite: nodeEnv === "production" ? "none" : "strict",
       maxAge: accessTokenCookieMaxAge,
     });
 
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: nodeEnv === "production",
-      sameSite: "strict",
+      sameSite: nodeEnv === "production" ? "none" : "strict",
       maxAge: refreshTokenCookieMaxAge, // 7 days
     });
 
