@@ -118,7 +118,8 @@ export const handleCreateUser = async (req, res, next) => {
       "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
       [result?.insertId, hashedVerificationCode]
     );
-    if (!otpResult?.insertId) {
+
+    if (otpResult?.affectedRows === 0) {
       throw createError(500, "Failed to store verification code");
     }
 
@@ -210,7 +211,7 @@ export const handleLoginUser = async (req, res, next) => {
         [user.id, hashedVerificationCode]
       );
 
-      if (!otpResult.insertId) {
+      if (otpResult.affectedRows === 0) {
         throw createError(500, "Failed to store verification code");
       }
 
@@ -331,7 +332,7 @@ export const handleForgotPassword = async (req, res, next) => {
       [user.id, hashedVerificationCode]
     );
 
-    if (!otpResult.insertId) {
+    if (otpResult.affectedRows === 0) {
       throw createError(500, "Failed to store verification code");
     }
 
@@ -364,19 +365,28 @@ export const handleVerifyOtp = async (req, res, next) => {
 
     // get the latest otp for the user from otp table
     const [otpRows] = await pool.query(
-      "SELECT otp, created_at FROM otp WHERE user_id = ? ORDER BY created_at DESC LIMIT 1",
+      `SELECT otp, created_at, 
+   TIMESTAMPDIFF(SECOND, created_at, NOW()) as age_seconds 
+   FROM otp WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
       [user?.id]
     );
+
     const otpRecord = otpRows[0] || null;
     if (!otpRecord) {
       throw createError(404, "OTP not found. Please request a new one.");
     }
-    // Check if OTP is expired (valid for 10 minutes)
-    const otpAge = Date.now() - new Date(otpRecord?.created_at).getTime();
 
-    if (otpAge > otpExpiringAge) {
+    if (otpRows[0]?.age_seconds > otpExpiringAge) {
       throw createError(400, "OTP has expired. Please request a new one.");
     }
+    // // Check if OTP is expired (valid for 10 minutes)
+    // const createdAt = new Date(otpRecord.created_at);
+    // const localCreatedAt = new Date(createdAt.getTime() - 6 * 60 * 60 * 1000);
+    // const otpAge = Date.now() - localCreatedAt.getTime();
+
+    // if (otpAge > otpExpiringAge) {
+    //   throw createError(400, "OTP has expired. Please request a new one.");
+    // }
     // Compare provided OTP with the hashed OTP in the database
     const isOtpValid = await bcrypt.compare(otp, otpRecord?.otp);
     if (!isOtpValid) {
@@ -422,7 +432,7 @@ export const handleRegenerateOtp = async (req, res, next) => {
     const verificationCode = Math.floor(
       100000 + Math.random() * 900000
     ).toString();
-    // console.log("Verification Code:", verificationCode);
+    console.log("Verification Code:", verificationCode);
     // Hash the OTP before storing
     const salt = await bcrypt.genSalt(10);
     const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
@@ -433,17 +443,17 @@ export const handleRegenerateOtp = async (req, res, next) => {
       html: emailTemplate(verificationCode),
     };
 
-    try {
-      await emailWithNodeMailer(emailData);
-    } catch (emailError) {
-      next(createError(500, "Failed to send verification email"));
-    }
+    // try {
+    //   await emailWithNodeMailer(emailData);
+    // } catch (emailError) {
+    //   next(createError(500, "Failed to send verification email"));
+    // }
     // Store OTP in the database
     const [otpResult] = await pool.query(
       "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
       [user?.id, hashedVerificationCode]
     );
-    if (!otpResult.insertId) {
+    if (otpResult?.affectedRows === 0) {
       throw createError(500, "Failed to store verification code");
     }
     res.status(200).json({
