@@ -38,13 +38,22 @@ export const handleAddTransaction = async (req, res, next) => {
     const client = clientRows[0];
 
     // 🔹 Insert transaction
+    const now = new Date();
+    const timeOnly = now.toTimeString().split(" ")[0]; // "HH:MM:SS"
     const result = await pool.query(
       `
       INSERT INTO transactions 
-      (client_id, amount, type, description, created_date)
-      VALUES (?, ?, ?, ?, ?)
+      (client_id, amount, type, description, created_date, created_time)
+      VALUES (?, ?, ?, ?, ?, ?)
       `,
-      [client?.id, numericAmount, type, finalDescription, created_date]
+      [
+        client?.id,
+        numericAmount,
+        type,
+        finalDescription,
+        created_date,
+        timeOnly,
+      ]
     );
 
     if (!result || result?.affectedRows === 0) {
@@ -52,7 +61,9 @@ export const handleAddTransaction = async (req, res, next) => {
     }
 
     // update client's updated_at field
-    await pool.query(`UPDATE clients SET updated_at = NOW() WHERE id = ?`, [
+
+    await pool.query(`UPDATE clients SET updated_at = ? WHERE id = ?`, [
+      now,
       client?.id,
     ]);
 

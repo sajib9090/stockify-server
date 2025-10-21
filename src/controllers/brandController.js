@@ -42,14 +42,15 @@ export const handleAddBrand = async (req, res, next) => {
     if (userData?.brand_id) {
       throw createError(400, "User already has a brand");
     }
-
+    // console.log(userData);
     // Insert user into database
+    const now = new Date();
     const [result] = await pool.query(
-      "INSERT INTO brands (name, mobile_1) VALUES (?, ?)",
-      [processedBrandName, mobile_1]
+      "INSERT INTO brands (name, mobile_1, created_at) VALUES (?, ?, ?)",
+      [processedBrandName, mobile_1, now]
     );
 
-    if (!result?.insertId) {
+    if (!result?.affectedRows) {
       throw createError(500, "Failed to create brand");
     }
     // Update user's brand_id
@@ -240,6 +241,10 @@ export const handleEditBrand = async (req, res, next) => {
     if (updates?.length === 0) {
       throw createError(400, "No changes detected");
     }
+
+    const updatedAt = new Date();
+    updates.push("updated_at = ?");
+    values.push(updatedAt);
     values.push(userData?.brand_id);
 
     const sql = `UPDATE brands SET ${updates.join(", ")} WHERE id = ?`;

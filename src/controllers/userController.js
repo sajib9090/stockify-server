@@ -84,9 +84,10 @@ export const handleCreateUser = async (req, res, next) => {
     }
 
     // Insert user into database
+    const now = new Date();
     const [result] = await pool.query(
-      "INSERT INTO users (name, email, mobile, password) VALUES (?, ?, ?, ?)",
-      [processedName, processedEmail, mobile, hashedPassword]
+      "INSERT INTO users (name, email, mobile, password, created_at) VALUES (?, ?, ?, ?, ?)",
+      [processedName, processedEmail, mobile, hashedPassword, now]
     );
 
     if (!result?.insertId) {
@@ -97,26 +98,27 @@ export const handleCreateUser = async (req, res, next) => {
     const verificationCode = Math.floor(
       100000 + Math.random() * 900000
     ).toString();
-    // console.log("Verification Code:", verificationCode);
+    console.log("Verification Code:", verificationCode);
 
     const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
 
-    const emailData = {
-      email,
-      subject: "Verification Code",
-      html: emailTemplate(verificationCode),
-    };
+    // const emailData = {
+    //   email,
+    //   subject: "Verification Code",
+    //   html: emailTemplate(verificationCode),
+    // };
 
-    try {
-      await emailWithNodeMailer(emailData);
-    } catch (emailError) {
-      next(createError(500, "Failed to send verification email"));
-    }
+    // try {
+    //   await emailWithNodeMailer(emailData);
+    // } catch (emailError) {
+    //   next(createError(500, "Failed to send verification email"));
+    // }
 
     // store verification code in otp table
+    const now2 = new Date();
     const [otpResult] = await pool.query(
-      "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
-      [result?.insertId, hashedVerificationCode]
+      "INSERT INTO otp (user_id, otp, created_at) VALUES (?, ?, ?)",
+      [result?.insertId, hashedVerificationCode, now2]
     );
 
     if (otpResult?.affectedRows === 0) {
@@ -186,7 +188,7 @@ export const handleLoginUser = async (req, res, next) => {
       const verificationCode = Math.floor(
         100000 + Math.random() * 900000
       ).toString();
-      // console.log("Verification Code:", verificationCode);
+      console.log("Verification Code:", verificationCode);
 
       // Hash the OTP before storing
       const salt = await bcrypt.genSalt(10);
@@ -198,17 +200,18 @@ export const handleLoginUser = async (req, res, next) => {
         html: emailTemplate(verificationCode),
       };
 
-      try {
-        await emailWithNodeMailer(emailData);
-      } catch (emailError) {
-        // console.log(emailError);
-        next(createError(500, "Failed to send verification email"));
-      }
+      // try {
+      //   await emailWithNodeMailer(emailData);
+      // } catch (emailError) {
+      //   // console.log(emailError);
+      //   next(createError(500, "Failed to send verification email"));
+      // }
 
       // Store OTP in the database
+      const now = new Date();
       const [otpResult] = await pool.query(
-        "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
-        [user.id, hashedVerificationCode]
+        "INSERT INTO otp (user_id, otp, created_at) VALUES (?, ?, ?)",
+        [user.id, hashedVerificationCode, now]
       );
 
       if (otpResult.affectedRows === 0) {
@@ -259,9 +262,11 @@ export const handleLoginUser = async (req, res, next) => {
     });
 
     // Optionally store refresh token in database for better security
+    const lastLogin = new Date();
+
     await pool.query(
-      "UPDATE users SET refresh_token = ?, last_login = NOW() WHERE id = ?",
-      [refreshToken, user?.id]
+      "UPDATE users SET refresh_token = ?, last_login = ? WHERE id = ?",
+      [refreshToken, lastLogin, user?.id]
     );
 
     res.status(200).send({
@@ -307,7 +312,7 @@ export const handleForgotPassword = async (req, res, next) => {
       100000 + Math.random() * 900000
     ).toString();
 
-    // console.log(verificationCode);
+    console.log(verificationCode);
 
     // Hash the OTP before storing
     const salt = await bcrypt.genSalt(10);
@@ -319,17 +324,18 @@ export const handleForgotPassword = async (req, res, next) => {
       html: emailTemplate(verificationCode),
     };
 
-    try {
-      await emailWithNodeMailer(emailData);
-    } catch (emailError) {
-      // console.log(emailError);
-      next(createError(500, "Failed to send verification email"));
-    }
+    // try {
+    //   await emailWithNodeMailer(emailData);
+    // } catch (emailError) {
+    //   // console.log(emailError);
+    //   next(createError(500, "Failed to send verification email"));
+    // }
 
     // Store OTP in the database
+    const now = new Date();
     const [otpResult] = await pool.query(
-      "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
-      [user.id, hashedVerificationCode]
+      "INSERT INTO otp (user_id, otp, created_at) VALUES (?, ?, ?)",
+      [user.id, hashedVerificationCode, now]
     );
 
     if (otpResult.affectedRows === 0) {
@@ -364,11 +370,12 @@ export const handleVerifyOtp = async (req, res, next) => {
     }
 
     // get the latest otp for the user from otp table
+    const now = new Date();
     const [otpRows] = await pool.query(
       `SELECT otp, created_at, 
-   TIMESTAMPDIFF(SECOND, created_at, NOW()) as age_seconds 
+   TIMESTAMPDIFF(SECOND, created_at, ?) as age_seconds 
    FROM otp WHERE user_id = ? ORDER BY created_at DESC LIMIT 1`,
-      [user?.id]
+      [now, user?.id]
     );
 
     const otpRecord = otpRows[0] || null;
@@ -449,9 +456,10 @@ export const handleRegenerateOtp = async (req, res, next) => {
     //   next(createError(500, "Failed to send verification email"));
     // }
     // Store OTP in the database
+    const now = new Date();
     const [otpResult] = await pool.query(
-      "INSERT INTO otp (user_id, otp) VALUES (?, ?)",
-      [user?.id, hashedVerificationCode]
+      "INSERT INTO otp (user_id, otp, created_at) VALUES (?, ?, ?)",
+      [user?.id, hashedVerificationCode, now]
     );
     if (otpResult?.affectedRows === 0) {
       throw createError(500, "Failed to store verification code");
@@ -508,10 +516,12 @@ export const handleSetNewPassword = async (req, res, next) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(trimmedPassword, salt);
     // update user password in db
+    const now = new Date();
     const [updateResult] = await pool.query(
-      "UPDATE users SET password = ? WHERE id = ?",
-      [hashedPassword, user?.id]
+      "UPDATE users SET password = ?, updated_at = ? WHERE id = ?",
+      [hashedPassword, now, user?.id]
     );
+
     if (updateResult?.affectedRows === 0) {
       throw createError(500, "Failed to update password");
     }
@@ -660,7 +670,10 @@ export const handleEditUser = async (req, res, next) => {
     }
 
     // ✅ Always update updated_at
-    updates.push("updated_at = NOW()");
+    const updatedAt = new Date();
+    updates.push("updated_at = ?");
+    values.push(updatedAt);
+    // updates.push("updated_at = NOW()");
     values.push(user?.id);
 
     // Build & execute update query

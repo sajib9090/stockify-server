@@ -10,6 +10,7 @@ const app = express();
 
 app.use(
   cors({
+    // origin: ["https://stockify-f1765.web.app", "http://localhost:5173"],
     origin: ["https://stockify-f1765.web.app"],
     optionsSuccessStatus: 200,
     credentials: true,

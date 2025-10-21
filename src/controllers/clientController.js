@@ -54,10 +54,11 @@ export const handleCreateClient = async (req, res, next) => {
     }
 
     // Insert client into DB
+    const now = new Date();
     const [result] = await pool.query(
       `INSERT INTO clients (name, type, mobile, created_at, updated_at, brand_id, created_by)
-       VALUES (?, ?, ?, NOW(), NULL, ?, ?)`,
-      [processedName, type, mobile || null, brand_id, created_by]
+       VALUES (?, ?, ?, ?, NULL, ?, ?)`,
+      [processedName, type, mobile || null, now, brand_id, created_by]
     );
     // Check if data was inserted
     if (!result || result?.affectedRows === 0) {
@@ -373,7 +374,10 @@ export const handleEditClientById = async (req, res, next) => {
     }
 
     // ✅ Always update updated_at
-    updates.push("updated_at = NOW()");
+    // updates.push("updated_at = NOW()");
+    const updatedAt = new Date();
+    updates.push("updated_at = ?");
+    values.push(updatedAt);
     values.push(sanitizedId);
 
     // Build & execute update query
