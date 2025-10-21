@@ -98,21 +98,21 @@ export const handleCreateUser = async (req, res, next) => {
     const verificationCode = Math.floor(
       100000 + Math.random() * 900000
     ).toString();
-    console.log("Verification Code:", verificationCode);
+    // console.log("Verification Code:", verificationCode);
 
     const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
 
-    // const emailData = {
-    //   email,
-    //   subject: "Verification Code",
-    //   html: emailTemplate(verificationCode),
-    // };
+    const emailData = {
+      email,
+      subject: "Verification Code",
+      html: emailTemplate(verificationCode),
+    };
 
-    // try {
-    //   await emailWithNodeMailer(emailData);
-    // } catch (emailError) {
-    //   next(createError(500, "Failed to send verification email"));
-    // }
+    try {
+      await emailWithNodeMailer(emailData);
+    } catch (emailError) {
+      next(createError(500, "Failed to send verification email"));
+    }
 
     // store verification code in otp table
     const now2 = new Date();
@@ -188,7 +188,7 @@ export const handleLoginUser = async (req, res, next) => {
       const verificationCode = Math.floor(
         100000 + Math.random() * 900000
       ).toString();
-      console.log("Verification Code:", verificationCode);
+      // console.log("Verification Code:", verificationCode);
 
       // Hash the OTP before storing
       const salt = await bcrypt.genSalt(10);
@@ -200,12 +200,12 @@ export const handleLoginUser = async (req, res, next) => {
         html: emailTemplate(verificationCode),
       };
 
-      // try {
-      //   await emailWithNodeMailer(emailData);
-      // } catch (emailError) {
-      //   // console.log(emailError);
-      //   next(createError(500, "Failed to send verification email"));
-      // }
+      try {
+        await emailWithNodeMailer(emailData);
+      } catch (emailError) {
+        // console.log(emailError);
+        next(createError(500, "Failed to send verification email"));
+      }
 
       // Store OTP in the database
       const now = new Date();
@@ -312,7 +312,7 @@ export const handleForgotPassword = async (req, res, next) => {
       100000 + Math.random() * 900000
     ).toString();
 
-    console.log(verificationCode);
+    // console.log(verificationCode);
 
     // Hash the OTP before storing
     const salt = await bcrypt.genSalt(10);
@@ -324,12 +324,12 @@ export const handleForgotPassword = async (req, res, next) => {
       html: emailTemplate(verificationCode),
     };
 
-    // try {
-    //   await emailWithNodeMailer(emailData);
-    // } catch (emailError) {
-    //   // console.log(emailError);
-    //   next(createError(500, "Failed to send verification email"));
-    // }
+    try {
+      await emailWithNodeMailer(emailData);
+    } catch (emailError) {
+      // console.log(emailError);
+      next(createError(500, "Failed to send verification email"));
+    }
 
     // Store OTP in the database
     const now = new Date();
@@ -439,7 +439,7 @@ export const handleRegenerateOtp = async (req, res, next) => {
     const verificationCode = Math.floor(
       100000 + Math.random() * 900000
     ).toString();
-    console.log("Verification Code:", verificationCode);
+    // console.log("Verification Code:", verificationCode);
     // Hash the OTP before storing
     const salt = await bcrypt.genSalt(10);
     const hashedVerificationCode = await bcrypt.hash(verificationCode, salt);
@@ -450,11 +450,11 @@ export const handleRegenerateOtp = async (req, res, next) => {
       html: emailTemplate(verificationCode),
     };
 
-    // try {
-    //   await emailWithNodeMailer(emailData);
-    // } catch (emailError) {
-    //   next(createError(500, "Failed to send verification email"));
-    // }
+    try {
+      await emailWithNodeMailer(emailData);
+    } catch (emailError) {
+      next(createError(500, "Failed to send verification email"));
+    }
     // Store OTP in the database
     const now = new Date();
     const [otpResult] = await pool.query(
