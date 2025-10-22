@@ -3,6 +3,7 @@ import {
   handleCreateUser,
   handleEditUser,
   handleForgotPassword,
+  handleGetActiveSessions,
   handleLoginUser,
   handleLogout,
   handleRefreshToken,
@@ -30,6 +31,7 @@ import {
   handleGetTransactions,
 } from "../controllers/transactionController.js";
 import { upload } from "../middleware/multer.js";
+import { test } from "../controllers/testController.js";
 
 export const apiRouter = express.Router();
 
@@ -46,7 +48,8 @@ apiRouter.put(
 apiRouter.post("/users/user/verify-otp/:email", handleVerifyOtp);
 apiRouter.post("/users/user/regenerate-otp/:email", handleRegenerateOtp);
 apiRouter.post("/users/user/forgot-password/:email", handleForgotPassword);
-apiRouter.post("/users/user/set-password/", handleSetNewPassword);
+apiRouter.post("/users/user/set-password", handleSetNewPassword);
+apiRouter.get("/users/user/user-session", isLoggedIn, handleGetActiveSessions);
 
 //brand
 apiRouter.post("/brands/create-brand", isLoggedIn, handleAddBrand);
@@ -95,3 +98,5 @@ apiRouter.delete(
   isLoggedIn,
   handleDeleteTransaction
 );
+
+apiRouter.get("/tests", test);

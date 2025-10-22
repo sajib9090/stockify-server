@@ -1,3 +1,4 @@
+import UAParser from "ua-parser-js";
 import pool from "../config/db.js";
 
 // Generate unique device ID

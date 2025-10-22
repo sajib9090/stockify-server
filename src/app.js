@@ -1,17 +1,19 @@
-// src/app.js
 import express from "express";
 import morgan from "morgan";
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import createError from "http-errors";
 import { apiRouter } from "./routers/routers.js";
+import { developmentOrigin, nodeEnv, productionOrigin } from "../important.js";
 
 const app = express();
 
+const allowedOrigins =
+  nodeEnv === "development" ? [developmentOrigin] : [productionOrigin];
+
 app.use(
   cors({
-    // origin: ["https://stockify-f1765.web.app", "http://localhost:5173"],
-    origin: ["https://stockify-f1765.web.app"],
+    origin: allowedOrigins,
     optionsSuccessStatus: 200,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],

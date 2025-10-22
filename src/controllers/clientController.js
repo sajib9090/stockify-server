@@ -24,7 +24,7 @@ export const handleCreateClient = async (req, res, next) => {
     }
 
     // Validate the name
-    const processedName = validateString(name, "Name", 2, 30);
+    const processedName = validateString(name, "Name", 2, 100);
 
     // Only validate mobile if it exists
     if (mobile) {
@@ -75,7 +75,7 @@ export const handleCreateClient = async (req, res, next) => {
 
 export const handleGetClients = async (req, res, next) => {
   const user = req.user.user ? req.user.user : req.user;
-
+  // console.log(user);
   try {
     // 🔹 Check authorization
     if (!user) throw createError(401, "Unauthorized");

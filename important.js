@@ -32,3 +32,8 @@ export const smtpPassword = process.env.SMTP_PASSWORD;
 export const smtpClientUrl = process.env.CLIENT_URL;
 
 export const nodeEnv = process.env.NODE_ENV;
+
+export const developmentOrigin = process.env.DEVELOPMENT_ORIGIN;
+export const productionOrigin = process.env.PRODUCTION_ORIGIN;
+
+export const maxDeviceCount = process.env.MAX_DEVICES;

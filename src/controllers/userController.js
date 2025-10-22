@@ -10,6 +10,7 @@ import {
   jwtAccessSecret,
   jwtRefreshExpiresIn,
   jwtRefreshSecret,
+  maxDeviceCount,
   nodeEnv,
   otpExpiringAge,
   refreshTokenCookieMaxAge,
@@ -20,6 +21,11 @@ import {
 } from "../utils/cloudinary.js";
 import { emailWithNodeMailer } from "../utils/email.js";
 import { emailTemplate } from "../template/emailTemplate.js";
+import {
+  formatDeviceInfoForStorage,
+  getClientDeviceInfo,
+  getDeviceInfo,
+} from "../utils/deviceInfo.js";
 
 export const handleCreateUser = async (req, res, next) => {
   try {
@@ -229,6 +235,26 @@ export const handleLoginUser = async (req, res, next) => {
       throw createError(403, "Your account has been banned");
     }
 
+    const [activeSessions] = await pool.query(
+      "SELECT COUNT(*) as session_count FROM user_sessions WHERE user_id = ? AND is_active = TRUE",
+      [user?.id]
+    );
+    const activeSessionCount = activeSessions[0].session_count;
+    const MAX_DEVICES = maxDeviceCount;
+
+    if (activeSessionCount >= MAX_DEVICES) {
+      // Option 1: Block login
+      // throw createError(
+      //   429,
+      //   `Maximum device limit reached. You can only be logged in on ${MAX_DEVICES} devices. Please log out from another device.`
+      // );
+
+      // logout all devices
+      await pool.query(
+        "UPDATE user_sessions SET is_active = FALSE WHERE user_id = ?",
+        [user?.id]
+      );
+    }
     // Generate JWT tokens
     const accessToken = jwt.sign(
       {
@@ -258,15 +284,31 @@ export const handleLoginUser = async (req, res, next) => {
       httpOnly: true,
       secure: nodeEnv === "production",
       sameSite: nodeEnv === "production" ? "none" : "strict",
-      maxAge: refreshTokenCookieMaxAge, // 7 days
+      maxAge: refreshTokenCookieMaxAge,
     });
 
     // Optionally store refresh token in database for better security
     const lastLogin = new Date();
 
+    // await pool.query(
+    //   "UPDATE users SET refresh_token = ?, last_login = ? WHERE id = ?",
+    //   [refreshToken, lastLogin, user?.id]
+    // );
+
+    const deviceInfo = getDeviceInfo(req);
+
+    const storageDeviceInfo = formatDeviceInfoForStorage(deviceInfo);
+
+    // Store the session in user_sessions
     await pool.query(
-      "UPDATE users SET refresh_token = ?, last_login = ? WHERE id = ?",
-      [refreshToken, lastLogin, user?.id]
+      "INSERT INTO user_sessions (user_id, device_info, refresh_token, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
+      [
+        user?.id,
+        JSON.stringify(storageDeviceInfo),
+        refreshToken,
+        lastLogin,
+        lastLogin,
+      ]
     );
 
     res.status(200).send({
@@ -545,36 +587,70 @@ export const handleRefreshToken = async (req, res, next) => {
 
     // Verify refresh token
     const decoded = jwt.verify(refreshToken, jwtRefreshSecret);
-    // console.log("object", decoded);
-    // Verify token exists in database
-    const [rows] = await pool.query(
-      "SELECT * FROM users WHERE id = ? AND refresh_token = ? LIMIT 1",
-      [decoded?.id, refreshToken]
+
+    // Verify token exists in database and get session
+    const [sessions] = await pool.query(
+      "SELECT * FROM user_sessions WHERE refresh_token = ? AND user_id = ? AND is_active = TRUE",
+      [refreshToken, decoded?.id]
     );
 
-    const user = rows[0];
-    // console.log(user);
-    if (!user) {
-      throw createError(403, "Invalid refresh token");
+    if (sessions.length === 0) {
+      return next(createError(403, "Invalid refresh token"));
     }
 
-    // Generate new access token
+    const session = sessions[0];
+
+    // IMPORTANT: Fetch the actual user data
+    const [users] = await pool.query(
+      "SELECT id, active_status, role FROM users WHERE id = ? LIMIT 1",
+      [session.user_id]
+    );
+
+    const user = users[0];
+
+    if (!user) {
+      throw createError(403, "User not found");
+    }
+
+    // Check if user is still active
+    if (user.active_status === 0) {
+      throw createError(403, "User account is not active");
+    }
+
+    // Generate new tokens with CORRECT user data
     const newAccessToken = jwt.sign(
       {
-        id: user?.id,
-        active_status: user?.active_status,
-        role: user?.role || "user",
+        id: user.id, // Now this is the actual user ID
+        active_status: user.active_status,
+        role: user.role,
       },
       jwtAccessSecret,
       { expiresIn: jwtAccessExpiresIn }
     );
 
-    // Set new access token cookie
+    const newRefreshToken = jwt.sign({ id: user.id }, jwtRefreshSecret, {
+      expiresIn: jwtRefreshExpiresIn,
+    });
+
+    // Update session with new refresh token
+    await pool.query(
+      "UPDATE user_sessions SET refresh_token = ?, updated_at = ? WHERE id = ?",
+      [newRefreshToken, new Date(), session.id]
+    );
+
+    // Set new tokens as cookies
     res.cookie("accessToken", newAccessToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
+      secure: nodeEnv === "production",
+      sameSite: nodeEnv === "production" ? "none" : "strict",
       maxAge: accessTokenCookieMaxAge,
+    });
+
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: nodeEnv === "production",
+      sameSite: nodeEnv === "production" ? "none" : "strict",
+      maxAge: refreshTokenCookieMaxAge,
     });
 
     res.status(200).send({
@@ -591,10 +667,16 @@ export const handleLogout = async (req, res, next) => {
   try {
     const refreshToken = req.cookies.refreshToken;
 
+    // console.log(refreshToken);
+
     if (refreshToken) {
       // Remove refresh token from database
+      // await pool.query(
+      //   "UPDATE users SET refresh_token = NULL WHERE refresh_token = ?",
+      //   [refreshToken]
+      // );
       await pool.query(
-        "UPDATE users SET refresh_token = NULL WHERE refresh_token = ?",
+        "UPDATE user_sessions SET is_active = FALSE WHERE refresh_token = ?",
         [refreshToken]
       );
     }
@@ -703,6 +785,171 @@ export const handleEditUser = async (req, res, next) => {
         role: userInfo?.role,
         avatar_url: userInfo?.avatar_url,
       },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const handleGetActiveSessions = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+
+  try {
+    // Clean up inactive sessions older than 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    const [cleanupResult] = await pool.query(
+      "DELETE FROM user_sessions WHERE is_active = FALSE AND updated_at < ?",
+      [sevenDaysAgo]
+    );
+
+    // console.log(
+    //   `Cleaned up ${cleanupResult.affectedRows} inactive sessions older than 7 days`
+    // );
+
+    // Fetch active sessions
+    const [sessions] = await pool.query(
+      "SELECT id, device_info, created_at, updated_at FROM user_sessions WHERE user_id = ? AND is_active = TRUE",
+      [user?.id]
+    );
+
+    const activeSessions = sessions.map((session) => {
+      const deviceInfo =
+        typeof session.device_info === "string"
+          ? JSON.parse(session.device_info)
+          : session.device_info;
+
+      return {
+        sessionId: session.id,
+        device: getClientDeviceInfo(deviceInfo),
+        loginTime: session.created_at,
+        lastActive: session.updated_at,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Successfully fetched active sessions",
+      data: activeSessions,
+      cleanup: {
+        removedSessions: cleanupResult.affectedRows,
+        olderThan: sevenDaysAgo.toISOString().split("T")[0],
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Logout from all devices
+export const handleLogoutAllDevices = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+
+  try {
+    // Deactivate all sessions for the user
+    const [result] = await pool.query(
+      "UPDATE user_sessions SET is_active = FALSE WHERE user_id = ?",
+      [user?.id]
+    );
+
+    // Optional: Delete inactive sessions immediately for cleaner database
+    await pool.query(
+      "DELETE FROM user_sessions WHERE user_id = ? AND is_active = FALSE",
+      [user?.id]
+    );
+
+    // Clear cookies for current device
+    res.clearCookie("accessToken", {
+      httpOnly: true,
+      secure: nodeEnv === "production",
+      sameSite: nodeEnv === "production" ? "none" : "strict",
+    });
+
+    res.clearCookie("refreshToken", {
+      httpOnly: true,
+      secure: nodeEnv === "production",
+      sameSite: nodeEnv === "production" ? "none" : "strict",
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Successfully logged out from all devices",
+      devicesLoggedOut: result.affectedRows,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Logout from a specific device/session
+export const handleLogoutSpecificDevice = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+  const { sessionId } = req.params; // or req.body
+
+  try {
+    // Verify the session belongs to the user before logging out
+    const [result] = await pool.query(
+      "UPDATE user_sessions SET is_active = FALSE WHERE id = ? AND user_id = ?",
+      [sessionId, user?.id]
+    );
+
+    if (result.affectedRows === 0) {
+      throw createError(404, "Session not found or already logged out");
+    }
+
+    // Optional: Delete the session immediately
+    await pool.query("DELETE FROM user_sessions WHERE id = ? AND user_id = ?", [
+      sessionId,
+      user?.id,
+    ]);
+
+    res.status(200).json({
+      success: true,
+      message: "Successfully logged out from the device",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Logout from all devices EXCEPT current device
+export const handleLogoutOtherDevices = async (req, res, next) => {
+  const user = req.user.user ? req.user.user : req.user;
+  const refreshToken = req.cookies.refreshToken;
+
+  try {
+    if (!refreshToken) {
+      throw createError(401, "No active session found");
+    }
+
+    // Get current session ID
+    const [currentSession] = await pool.query(
+      "SELECT id FROM user_sessions WHERE refresh_token = ? AND user_id = ? AND is_active = TRUE",
+      [refreshToken, user?.id]
+    );
+
+    if (currentSession.length === 0) {
+      throw createError(404, "Current session not found");
+    }
+
+    const currentSessionId = currentSession[0].id;
+
+    // Logout all other devices
+    const [result] = await pool.query(
+      "UPDATE user_sessions SET is_active = FALSE WHERE user_id = ? AND id != ?",
+      [user?.id, currentSessionId]
+    );
+
+    // Optional: Delete inactive sessions
+    await pool.query(
+      "DELETE FROM user_sessions WHERE user_id = ? AND id != ? AND is_active = FALSE",
+      [user?.id, currentSessionId]
+    );
+
+    res.status(200).json({
+      success: true,
+      message: "Successfully logged out from all other devices",
+      devicesLoggedOut: result.affectedRows,
     });
   } catch (error) {
     next(error);
