@@ -1,6 +1,7 @@
 import jwt from "jsonwebtoken";
 import { jwtAccessSecret, nodeEnv } from "../../important.js";
 import createError from "http-errors";
+import pool from "../config/db.js";
 
 // export const isLoggedIn = (req, res, next) => {
 //   try {
