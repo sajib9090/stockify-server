@@ -40,7 +40,7 @@ export const handleAddTransaction = async (req, res, next) => {
     // 🔹 Insert transaction
     const now = new Date();
     const timeOnly = now.toTimeString().split(" ")[0]; // "HH:MM:SS"
-    console.log(timeOnly);
+    // console.log(timeOnly);
     const result = await pool.query(
       `
       INSERT INTO transactions 
