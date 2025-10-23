@@ -884,7 +884,7 @@ export const handleLogoutAllDevices = async (req, res, next) => {
 // Logout from a specific device/session
 export const handleLogoutSpecificDevice = async (req, res, next) => {
   const user = req.user.user ? req.user.user : req.user;
-  const { sessionId } = req.params; // or req.body
+  const { sessionId } = req.params;
 
   try {
     // Verify the session belongs to the user before logging out
@@ -893,7 +893,7 @@ export const handleLogoutSpecificDevice = async (req, res, next) => {
       [sessionId, user?.id]
     );
 
-    if (result.affectedRows === 0) {
+    if (result?.affectedRows === 0) {
       throw createError(404, "Session not found or already logged out");
     }
 

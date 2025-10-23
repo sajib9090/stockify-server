@@ -6,6 +6,8 @@ import {
   handleGetActiveSessions,
   handleLoginUser,
   handleLogout,
+  handleLogoutAllDevices,
+  handleLogoutSpecificDevice,
   handleRefreshToken,
   handleRegenerateOtp,
   handleSetNewPassword,
@@ -50,6 +52,16 @@ apiRouter.post("/users/user/regenerate-otp/:email", handleRegenerateOtp);
 apiRouter.post("/users/user/forgot-password/:email", handleForgotPassword);
 apiRouter.post("/users/user/set-password", handleSetNewPassword);
 apiRouter.get("/users/user/user-session", isLoggedIn, handleGetActiveSessions);
+apiRouter.post(
+  "/users/user/user-session-logout/:sessionId",
+  isLoggedIn,
+  handleLogoutSpecificDevice
+);
+apiRouter.post(
+  "/users/user/user-session-logout-all",
+  isLoggedIn,
+  handleLogoutAllDevices
+);
 
 //brand
 apiRouter.post("/brands/create-brand", isLoggedIn, handleAddBrand);
