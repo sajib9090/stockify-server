@@ -1,3 +1,4 @@
+import { generateDeviceId, parseDeviceInfo } from "../utils/device.js";
 import {
   formatDeviceInfoForStorage,
   getClientDeviceInfo,
@@ -6,25 +7,28 @@ import {
 
 export const test = async (req, res, next) => {
   try {
-    const deviceInfo = getDeviceInfo(req);
-    console.log(deviceInfo);
+    // const deviceInfo = getDeviceInfo(req);
+    // console.log(deviceInfo);
 
-    const storageDeviceInfo = formatDeviceInfoForStorage(deviceInfo);
-    console.log(storageDeviceInfo);
+    // const storageDeviceInfo = formatDeviceInfoForStorage(deviceInfo);
+    // console.log(storageDeviceInfo);
 
-    const xxx = getClientDeviceInfo(deviceInfo);
-    console.log(xxx);
+    // const xxx = getClientDeviceInfo(deviceInfo);
+    // console.log(xxx);
 
-    const password =
-      "$2b$10$BjAmefxJ5p0iN0alujOrnOU35y4Rv5/XgK/LLP1IrHJQ0BvyKy.lW";
+    const deviceInfo2 = generateDeviceId(req);
+    console.log(deviceInfo2);
 
-    const isPasswordValid = await bcrypt.compare(
-      trimmedPassword,
-      user?.password
-    );
+    const deviceInfoParse = parseDeviceInfo(req);
+    console.log(deviceInfoParse);
+
     res.status(200).json({
       success: true,
       message: "successfully passed",
+      data: {
+        deviceInfo2,
+        deviceInfoParse,
+      },
     });
   } catch (error) {
     next(error);

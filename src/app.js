@@ -13,8 +13,8 @@ const allowedOrigins =
 
 app.use(
   cors({
-    origin: ["https://stockify-f1765.web.app"],
-    // origin: allowedOrigins,
+    // origin: ["https://stockify-f1765.web.app"],
+    origin: allowedOrigins,
     optionsSuccessStatus: 200,
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
